@@ -1,0 +1,136 @@
+---
+title: "R Notebook"
+output:
+  html_document:
+    df_print: paged
+---
+
+Функция загрузки данных:
+```{r}
+load_data <- function(file.name = 0) {
+  if (file.name == 0) { return("File name is not entered.") }
+  data <- read.csv(file.name, header = TRUE)
+  return(data)
+}
+```
+
+
+```{r}
+data <- load_data("C:\\Users\\antpl_0n4duwv\\Documents\\Studies\\prac\\moscow_apartment_listings.csv")
+str(data)
+```
+
+Построим Bar Plot для количества объявлений о продаже квартиры в зависимости от административного округа Москвы: 
+```{r}
+make_bar_plot <- function(data) {
+  data[, "AO"] <- as.factor(data[, "AO"])
+  my_factor <- data[, "AO"]
+  plot(my_factor, main = "Bar Plot", xlab = "districs", ylab = "the number of flats", las = 1, cex.names = 0.7, col = "grey22")
+}
+make_bar_plot(data)
+```
+
+```{r}
+make_box_plots <- function(data) {
+  my_factor <- factor(data[, "AO"])
+  y <-  data[, "price"]
+  plot(my_factor, y, main = "Box Plots", xlab = "Districs", ylab = "Price", las = 2, cex=0.5, col = "grey22")
+  mtext("Price", side = 2, line = 5)
+}
+make_box_plots(data)
+```
+
+
+
+Построим график зависимости цены квартиры от ее метража:
+```{r}
+make_scatter_plot <- function(data) {
+  plot(data[, c("footage", "price")], main = "Price in depence of footage", pch = '.')
+}
+make_scatter_plot(data)
+
+```
+
+
+Итого: функция загрузки и выборочной визуализации данных
+```{r}
+load_and_draw_data <- function(file.name) {
+  data <- load_data(file.name)
+  if (is.character(data)) { print(data); return() }
+  make_bar_plot(data)
+  make_box_plots(data)
+  make_Scatter_plot(data)
+  return(data)
+}
+```
+
+
+Продемонстрируем возможности визаулизации функции plot на примере следующей функции:
+```{r}
+f <- function(x) {
+  return(x + sin(x))
+}
+
+x <- seq(-5, 5, 0.5)
+y <- f(x)
+
+par(mfrow = c(2, 3), bg="white")
+type_list <- list("h", "l", "p")
+for (i in 1:6) {
+  plot(x, y, main = as.character(i), xlab = "x", ylab = "f(x) = x + sin(x)", type = type_list[i %% 3 + 1], col = i, pch = i + 4, lwd = i / 4)
+}
+
+```
+
+
+
+
+
+Примеры применения функций apply, lapply, sapply, vapply, mapply, rapply, tapply для векторной обработки данных.
+
+Воспользуемся функцией tapply для того, чтобы посчитать среднюю цену за квартиру в зависимости от округа, в котором она расположена: 
+```{r}
+mean.price <- tapply(data[, "price"], data[, "AO"], FUN = mean)
+mean.price
+
+```
+
+Переведем шкалу измерений цены в миллионы рублей c помощью функции sapply:
+```{r}
+round_to_millions <- function(num = 0) {
+  round(num / 10^6, 1)
+}
+
+apply(mean.price, 1, round_to_millions)
+```
+
+
+Рассчитаем среднее время, необходимое человеку, чтобы добраться до центра на метро, если расстояние от дома до квартиры он будет преодолевать пешком.
+(Считаем, что средняя скорость пешехода - 5 км/ч, средняя скорость метро - 50 км/ч)
+```{r}
+# все расстояния в метрах, результат в минутах
+time_to_center <- function(dist_to_subway, dist_to_center) {
+  return((dist_to_subway / 1000) / (5 / 60) + (dist_to_center / 1000) / (50 / 60))
+}
+
+# добавляем в датасет новый признак
+data[, "time_to_center"] <- mapply(time_to_center, data[, "dist_to_subway"], data[, "subway_dist_to_center"])
+
+road.time <- data[, "time_to_center"]
+
+# среднее, минимальное и максимальное время в дороге до центра
+mean(road.time)
+min(road.time)
+max(road.time)
+```
+
+
+Для демонстрации работы функции rapply создадим следующий список списков:
+```{r}
+l <- list(1, 2, list(3, 4, 5, list(6, 7, 8)), 9, list(10))
+
+rapply(l, function(x) { return(x^2)})
+```
+Функция рекурсивно применяет операцию к вложенным спискам нескольких уровней.
+
+
