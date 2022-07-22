@@ -1,0 +1,98 @@
+---
+title: "Домашняя работа №3"
+output:
+  html_document:
+    df_print: paged
+---
+
+Загружаем данные:
+```{r}
+msc.apart.data <- read.csv("C:\\Users\\antpl_0n4duwv\\Documents\\Studies\\prac\\moscow_apartment_listings.csv")
+attach(msc.apart.data)
+```
+
+### Примеры построения ядерной плотности распределения
+
+Строим гистограмму распределения цен квартир и линии ядерных плотностей для распределения цены для различных параметров bw (по умолчанию параметр kernel = "gaussian"):
+```{r}
+hist(price, breaks = 30, freq = FALSE, col = "grey87", main = "Гистограмма с различными кривыми ядерной плотности", xlab = "Цена", ylab = "Плотность")
+
+
+lines(density(price, bw = 150000), lwd = 3.5, col = "red3")
+lines(density(price, bw = "nrd0"), lwd = 3, col = "yellow3")
+legend(x = 1.65 * 10^7, y = 1.7 * 10^(-7), title = "Параметр bw", legend = c("150000", "\"nrd0\""), col = c("red3", "yellow3"), fill = c("red3", "yellow3"), text.font = 3, bg = "grey70")
+
+```
+
+Построим аналогичные графики, используя различные ядерные функции:
+```{r}
+kernels = c("cosine", "rectangular",
+            "triangular")
+colors = c(2:(2 + length(kernels)))
+
+for (i in 1:length(kernels)) {
+  hist(footage, freq = FALSE, breaks = 30, main = "Гистограмма с кривой ядерной плотности", xlab = "метраж", ylab = "Вероятность")
+  lines(density(footage, kernel = kernels[i], bw = 0.7), col = colors[i], lw = 3)
+  legend(75, 0.05, legend = kernels[i], col = colors[i], fill = colors[i], title = "Тип ядра")
+}
+
+```
+
+### Пример применения функции cdplot
+
+```{r}
+repair <- as.factor(repair)
+colours <- c("steelblue1", "steelblue2", "steelblue3", "steelblue4")
+cdplot(repair ~ house_age, bw = 4, col = colours, xlab = "Возраст дома, года", ylab = c("Качество ремонта"))
+legend(x = "top", title = "Качество ремонта", legend = c("1 - низкое", "2", "3", "4 - высокое"), col = colours, fill = colours, cex = 0.7)
+```
+
+### Пример графика BoxPlot
+```{r}
+AO <- as.factor(AO)
+colours <- c("forestgreen", "magenta", "maroon2", "orange1", "royalblue2", "red", "skyblue3", "darkcyan", "coral")
+boxplot(price ~ AO, main = "Распределение цен в зависимости от округа", ylab = "Администативный округ", xlab = "Цена", las = 1, col = colours, horizontal = TRUE)
+legend(x = "bottomleft", legend = levels(AO), col = colours, fill = colours, cex = 0.45)
+```
+
+
+
+### Пример построения Pie Chart
+Признак subway_dist_to_center показывает расстояния в метрах от ближайшего к квартире метро до центра Москвы.
+```{r}
+plot(density(subway_dist_to_center), xlab = "Расстояние до центра Москвы", ylab = "Плотность", col = "red", main = "Ядерная плотность для subway_dist_to_center")
+
+```
+
+
+Исходя из вида распределения, можно разбить значения расстоянией на следующие интервалы и таким образом преобразовать признак с непрерывными значениями в фактор (значения фактора - мера расстояния от центра):
+```{r}
+dist.factor <- cut(subway_dist_to_center, breaks = c(min(subway_dist_to_center) - 1, 5000, 10000, 15000, 20000, max(subway_dist_to_center) + 1), labels = c(1:5))
+```
+
+Подсчитаем количество квартир, принадлежащих каждому классу:
+```{r}
+library("dplyr")
+
+cnt.table <- dplyr::count(data.frame(dist.factor), dist.factor)
+cnt.table
+
+```
+
+Подсчитаем доли квартир с соответствующими расстояниями до центра:
+```{r}
+percents <- round(100 * cnt.table$n / sum(cnt.table$n), 1)
+percents <- sapply(percents, as.character)
+percents <- paste(percents, "%", sep = "")
+```
+
+Отрисовка Pie Chart-а:
+```{r}
+colours <- c("deepskyblue1", "deepskyblue2", "deepskyblue3", "deepskyblue4", "darkblue")
+pie(cnt.table$n, labels = percents, col = colours, main = "Доли квартир по расстоянию до центра Москвы")
+legend <- c("меньше 5 км", "от 5 до 10 км", "от 10 до 15 км", "от 15 до 20 км", "больше 20 км")
+legend(x = "topleft", legend = legend, title = "Расстояние до центра", col = colours, fill = colours, cex = 0.8)
+
+```
+
+
