@@ -1,0 +1,233 @@
+---
+title: "Домашняя работа № 9, Плеханов Антон 316"
+output:
+  html_document:
+    df_print: paged
+---
+
+**Обновленная реализация функции regr()**
+
+```{r}
+# Модель для оценки постоянной Хаббла
+library(gamair)
+data(hubble)
+
+M <- lm(y ~ x - 1, data = hubble) # "-1" - для исключения свободного члена
+
+# Оценим возраст Вселенной "вручную"
+hub.const <- summary(M)$coefficients[1] /3.09e19
+age <- (1/hub.const)/(60^2*24*365)
+
+# Модифицированная функция regr, возвращающая возраст вселенной
+regr <- function(data, indices) {
+  # вектор indices будет формироваться функцией boot() 
+  dat <- data[indices, ] 
+  fit <- lm(y ~ -1 + x, data = dat)
+  # return(summary(fit)$coefficients[1])
+  return ((1 / (summary(fit)$coefficients[1] / 3.09e19)) / (60^2 * 24 * 365))
+}
+
+library(boot)
+results <- boot(data = hubble, statistic = regr, R = 1000)
+
+plot(results)
+print("Возраст вселенной, оцененный по всей выборке: ")
+print(age)
+```
+
+
+**Доверительные интервалы для модели регрессии и интервал предсказаний**
+
+Загрузка данных:
+```{r}
+file <- file.choose()
+data <- read.csv(file)
+str(data)
+```
+
+Целевая переменная - price. Для построения регрессионной модели будем использовать следующие признаки (их будет несколько, т.е. модель будет множественной. В конкретной задаче нет смысла рассматривать другую модель, это будет показано в пункте 3):
+```{r}
+features <- c("price", "repair", "year_built_empty", "house_age", 
+              "dist_to_subway", "subway_dist_to_center", 
+              "rooms", "footage", "floor", "AO", "hm", 
+              "first_floor", "last_floor")
+
+data <- data[, features]
+colnames(data)
+```
+
+Также преобразуем категориальные признаки к типу factor:
+```{r}
+categorical <- c("AO", "hm", "first_floor", "last_floor")
+
+for (feature in categorical) {
+  data[, feature] <- as.factor(data[, feature])
+}
+```
+
+Напомним распределение признака price (чтобы понимать масштабы ошибок):
+```{r}
+hist(data$price, freq = FALSE, main="Гистограмма признака price", 
+     xlab = "Цена, руб.", ylab = "Плотность вероятности") 
+```
+
+Построение регрессионной модели:
+```{r}
+M <- lm(price ~ repair + year_built_empty + house_age + dist_to_subway +
+          subway_dist_to_center + rooms + footage + floor + AO + 
+          hm + first_floor + last_floor,
+        data = data
+          )
+summary(M)
+```
+По коэффициентам модели можем сделать следующие наблюдения:
+
+1. Поскольку в качестве базового уровня признака AO был выбран "CAO" (Центральный АО), коэффициенты, соответствующие другим АО, меньше нуля (то есть если квартира НЕ в CAO, то это уменьшает прогноз ее цены) - логично. При этом гипотеза о равенстве нулю коэффициента AOUZAO принимается (p-value = 0.57 > 0). 
+
+2. Квартиры на первых/последних этажах уменьшают прогноз цены (см. признаки first_floor1, last_floor1 и соответствующие коэффициенты).
+
+3. Коэффициенты, соответствующие признакам hmbrick, hmmonolith, hmpanel больше нуля, т.е. в сравнении с базовым уровнем "block" эти признаки вносят положительный вклад в прогноз цены.
+
+4. Веса, соответствующие признакам расстояния до метро/центра, а также возрасту дома, отрицательны, что правдоподобно.
+
+Используем параметрический подход для построения доверительных интервалов для коэффициентов модели:
+```{r}
+out <- summary(M)
+coef_est <- out$coefficients[, 1]
+std_est <- out$coefficients[, 2]
+  
+free_deg <- out$df[2]
+  
+ci.lower <- coef_est - qt(0.975, df = free_deg) * std_est
+ci.upper <- coef_est + qt(0.975, df = free_deg) * std_est
+
+for (coef_name in rownames(out$coefficients)) {
+  print(c(ci.lower[coef_name], ci.upper[coef_name]))
+}
+```
+
+
+
+
+
+**Оценка качества регрессионных моделей**
+
+Функция, извелкающая всю полезную для оценки качества модели информацию:
+```{r}
+extract <- function(fit) {
+  sigma <- summary(fit)$sigma  # среднеквадратическаяя ошибка
+  R2.adj <- summary(fit)$adj.r.squared  # скорректированный коэффициент R2 
+  aic <- AIC(fit)           #  Информационный АIC-критерий
+  out <- data.frame(sigma = sigma, R2.adj = R2.adj, AIC = aic)
+  return(out)    }
+```
+
+Рассмотрим еще несколько регрессионых моделей для рассматриваемых данных.
+
+Базовая модель:
+```{r}
+M <- lm(price ~ repair + year_built_empty + house_age + dist_to_subway +
+          subway_dist_to_center + rooms + footage + floor + AO + 
+          hm + first_floor + last_floor,
+        data = data
+          )
+summary(M)
+```
+Модель без признака rooms (поскольку p-value, соответствующее этому признаку, больше 0.05):
+```{r}
+M1 <- lm(price ~ repair + year_built_empty + house_age + dist_to_subway +
+          subway_dist_to_center + footage + floor + AO + 
+          hm + first_floor + last_floor,
+        data = data
+          )
+summary(M1)
+```
+Модель без признака floor:
+```{r}
+M2 <- lm(price ~ repair + house_age + dist_to_subway +
+          subway_dist_to_center + footage + AO + 
+          hm + first_floor + last_floor,
+        data = data
+          )
+summary(M2)
+```
+Модель линейной регрессии, построенная лишь по одному признаку footage:
+```{r}
+M3 <- lm(price ~ footage, data = data)
+summary(M3)
+```
+
+
+
+```{r}
+extract(M)
+extract(M1)
+extract(M2)
+extract(M3)
+```
+Модель, построенная без признака rooms, превосходит оставшиеся три по всем трем параметрам. При этом модель с одним признаком сильно хуже остальных трех по стандартной ошибке и показателю adjusted R^2.
+
+
+**Регуляризованный вариант регресии**
+
+
+```{r}
+library(MASS)
+M1.ridge <- lm.ridge(price ~ repair + year_built_empty + house_age + 
+                       dist_to_subway + subway_dist_to_center + 
+                       footage + floor + AO + hm + 
+                       first_floor + last_floor,
+        data = data,
+        lambda = seq(0, 5, 0.1))
+
+plot(x = M1.ridge$lambda, y = M1.ridge$GCV, type = "o", 
+     xlab = "Значение коэффициента регуляризации", 
+     ylab = "GCV")
+```
+Оптимальное значение параметра lambda:
+```{r}
+lambda <- M1.ridge$GCV[which.min(M1.ridge$GCV)]
+lambda
+```
+Построим оптимальную модель гребневой регрессии и вычислим стандартную ошибку модели на рассматриваемых данных:
+```{r}
+M.ridge <- lm.ridge(price ~ repair + year_built_empty + house_age + 
+                       dist_to_subway + subway_dist_to_center + 
+                       footage + floor + AO + hm + 
+                       first_floor + last_floor,
+        data = data,
+        lambda = 3.8)
+
+# Коэффициенты модели
+beta.M.ridge <- coef(M.ridge)
+
+# количество предикторов
+p <- length(beta.M.ridge)
+```
+
+
+
+Чтобы воспользоваться встроенной функцией predict для построения прогноза гребневой регресии, воспользуемся моделью без регуляризации и заменим ее коэффициенты на коэффициенты модели с регуляризацией:
+```{r}
+M_test <- lm(price ~ repair + year_built_empty + house_age + dist_to_subway +
+          subway_dist_to_center + footage + floor + AO + 
+          hm + first_floor + last_floor,
+        data = data
+          )
+
+M_test$coefficients <- beta.M.ridge
+
+RSS <- sum((data$price - predict(M_test))^2)
+
+# размер обучающей выборки
+n <- length(data$price)
+
+# рассчет стандартного отклонения
+RSE.ridge <- sqrt(RSS / (n - p - 1))
+```
+
+Сравнение стандартных ошибок с регуляризацией и без:
+```{r}
+c(RSE.ridge, summary(M1)$sigma)
+```
+Получившиеся модели слабо отличаются в смысле стандартной ошибки.
