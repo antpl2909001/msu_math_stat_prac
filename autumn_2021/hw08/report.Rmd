@@ -1,0 +1,140 @@
+---
+title: "Домашняя работа №8, Плеханов Антон 316"
+output:
+  html_document:
+    df_print: paged
+---
+
+**Проверка наличия мультиколлинеарности признаков с помощью корреляционной матрицы и фактора инфляции дисперсии** 
+
+Загрузка данных:
+```{r}
+file <- file.choose()
+data <- read.csv(file)
+```
+
+Структура данных:
+```{r}
+str(data)
+```
+
+Для числовых признаков построим матрицу корреляций:
+```{r}
+library(corrplot)
+numeric_features <- c("price", "repair", "house_age", "dist_to_subway", 
+                      "subway_dist_to_center", "rooms", "footage", 
+                      "floor", "first_floor", "last_floor", "max_floor")
+
+numeric_data <- data[, numeric_features]
+
+for (column in colnames(numeric_data)) {
+  numeric_data[, column] <- as.numeric(numeric_data[, column])
+}
+
+M <- cor(numeric_data)
+col4 <- colorRampPalette(c("#7F0000", "red", "#FF7F00", "yellow",
+                           "#7FFF7F", "cyan", "#007FFF", "blue","#00007F"))
+corrplot(M, method = "color", col = col4(10), cl.length = 11,
+         order = "original",  addCoef.col = "black", 
+         number.font = 1, number.cex = 0.5, 
+         tl.cex = 0.7, tl.srt = 45, tl.col = "black", tl.offset = 1)
+```
+
+Отметим коэффициенты корреляции по модулю больше 0.5 между следующими парами признаков:
+1. price и footage - коэффициент корреляции 0.69. Объясняется тем, что площадь квартиры является основным ценообразующим фактором, и связь между ними при прочих равных линейна.
+2. max_floor и house_age - коэффициент корреляции -0.76. Обратная линейная зависимость между этими признаками объясняется техническим прогрессом. 
+3. footage и rooms - коэффициент корреляции 0.65. (взаимосвязь очевидна: чем больше комнат, тем больше площадь квартиры)
+4. max_floor и floor - коэффициент корреляции 0.58.
+
+
+Проверка мультиколлинеарности с помощью фактора инфляции дисперсии. В качестве целевого признака выступает признак price.
+```{r, warning=FALSE}
+library(car)
+vif(lm(price ~ repair + house_age + dist_to_subway + 
+         subway_dist_to_center + rooms + footage + floor + 
+         first_floor + last_floor + max_floor, data = data))
+```
+
+Максимальные значения фактора инфляции дисперсии для признаков max_floor (3.161492) и house_age (2.940965). Из предыдущего графика мы также выяснили, что коэффициент корреляции между ними достаточно высок (по модулю): -0.76. Поэтому имеет смысл удалить признак max_floor из линейной модели:
+```{r}
+vif(lm(price ~ repair + house_age + dist_to_subway + 
+         subway_dist_to_center + rooms + footage + floor + 
+         first_floor + last_floor, data = data))
+```
+
+Итого: все значения фактора инфляции дисперсии ниже 2.5. 
+
+
+
+**Взаимосвязи между признаками**
+
+Исследуем взаимосвязи между признаками с помощью диаграмм рассеяния:
+
+```{r}
+pairs(data[, c("price", "dist_to_subway", "repair", "house_age", "max_floor")], panel = panel.smooth)
+```
+
+Исходя из построенных графиков, явная обратная связь прослеживается между признаками max_floor и house_age, также присутствует слабая обратная связь между признаками price и dist_to_subway и слабая прямая связь между признаками price и max_floor.
+
+```{r}
+coplot(data$price ~  data$footage | data$AO * as.factor(data$hm),
+       ylab = c("Цена, руб.", "Тип дома"),
+       xlab = c("Площадь квартиры (м^2)", "Административный округ"),
+       panel = function(x, y, ...) {
+         tmp <- lm(y ~ x, na.action = na.omit)
+         points(x, y, col="brown")
+         abline(tmp) })
+```
+
+Прямая взаимосвязь между признаками price и footage не зависит от типа дома и административного округа.
+В то же время из построенной диаграммы можем заключить, что квартиры с площадью выше 70 кв.м. в большинстве располагаются в домах типа monolith. 
+
+
+```{r}
+data$repair <- as.factor(data$repair)
+coplot(price ~ dist_to_subway | AO * repair, data = data,
+       xlab = c("Расстояние до метро, м", "Административный округ"),
+       ylab = c("Цена, руб.", "Качество ремонта"),
+       panel = function(x, y, ...) {
+         tmp <- lm(y ~ x, na.action = na.omit)
+         points(x, y, col="red")
+         abline(tmp) })
+```
+
+Как и ожидалось, в большинстве административных округов зависимость между ценой и расстоянием до метро обратная.
+
+**Дисперсионный анализ**
+
+Выясним с помощью однофакторного дисперсионного анализа, оказывает ли влияние на цену фактор hm типа дома (block, brick, monolith, panel).
+
+Для начала построим boxplot для распределния цены в зависимсоти от типа дома:
+```{r}
+data$hm <- as.factor(data$hm)
+boxplot(price ~ hm, data, main = c("Графики распределения цены в зависимости", "от типа дома"), xlab = "Тип дома", ylab = "Цена", cex=0.5, col = rainbow(length(levels(data$hm))), outline = FALSE)
+```
+
+Исходя из того, насколько отличаются медианы цен, а также объема данных (всего более 12000 объектов) уже можно предположить, что различие между средними окажутся значимымми.
+
+Проверим это с помощью соотвествующего статистического теста:
+```{r}
+M <- aov(price ~ hm, data = data)
+summary(M)
+```
+
+p-value < 0.05, значит, фактор типа дома оказывает влияние на цену.
+
+
+
+Проведем аналогичный анализ для фактора административного округа:
+```{r}
+data$AO <- as.factor(data$AO)
+boxplot(data$price ~ data$AO, main = c("Графики распределения цены в зависимости", "от административного округа"), xlab = "", ylab = "Цена", las = 2, cex=0.5, col = rainbow(length(levels(data$AO))), outline = FALSE)
+mtext("Административный округ", side = 1, line = 4)
+```
+
+
+```{r}
+summary(aov(price ~ AO, data = data))
+```
+
+p-value < 0.05, значит, фактор административного округа оказывает влияние на цену.
