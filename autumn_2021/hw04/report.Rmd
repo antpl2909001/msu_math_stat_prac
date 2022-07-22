@@ -1,0 +1,254 @@
+---
+title: "Домашняя работа №4"
+output:
+  html_document:
+    df_print: paged
+  pdf_document: default
+---
+
+## 1. Задания из комментариев ноутбука
+
+```{r}
+data <- mtcars
+dotchart(data$mpg, labels = row.names(data),
+         main="Расстояние (в милях), которое проезжает автомобиль на 1 галлоне",
+         xlab="Значение", cex = 0.5)
+
+```
+
+Перерисуем график для расхода топлива в литрах/км.
+
+```{r}
+# функция форматирования единиц измерения для расхода топлива
+format_consumption <- function(miles_per_gallon) {
+  km_per_litr <- 0.425144 * miles_per_gallon
+  return(1 / km_per_litr)
+}
+
+# добавим новый признак - количество топлива в литрах, расходуемое на 1 км
+data["lpkm"] <- format_consumption(data$mpg)
+
+# Сделали фактор из типа коробки передач
+data$am <- as.factor(data$am)
+
+# Создали признак цвета в соответствии с типом коробки передач
+data$color[data$am == 0] <- "red"
+data$color[data$am == 1] <- "forestgreen"
+
+# Упорядочили данные по признаку lpkm
+ord_data <- data[order(data$lpkm),]
+
+# Поскольку более естественная характеристика расхода топлива - количество литров на 100 км, нарисуем именно такой график (дополнительно сгруппируем данные по типу коробки передач):
+dotchart(100 * ord_data$lpkm, row.names(ord_data), groups = ord_data$am,
+         gcolor = "black", color = ord_data$color,
+         main = "Расход топлива в литрах на 100 км", 
+         xlab = "Значение, литры / 100 км", cex = 0.5)
+legend(x = "bottomright", title = "Коробка передач", 
+       legend = c("автоматическая", "ручная"),
+       col = c("red", "forestgreen"), fill = c("red", "forestgreen"))
+```
+
+Из получившегося графика явно видно, что в среднем расход топлива у машин с автоматической коробкой передач выше, чем у машин с ручной.
+
+
+Построим dotchart для признака disp (объем двигателя):
+```{r}
+data <- mtcars
+
+# Сделали фактор из типа двигателя
+data$vs <- as.factor(data$vs)
+
+# Создали признак цвета в соответствии с типом коробки передач
+data$color[data$vs == 0] <- "red"
+data$color[data$vs == 1] <- "forestgreen"
+
+# Упорядочили данные по признаку disp
+ord_data <- data[order(data$disp),]
+
+# Сгруппируем данные по типу двигателя:
+dotchart(ord_data$disp, row.names(ord_data), groups = ord_data$vs,
+         gcolor = "black", color = ord_data$color,
+         main = "Объем двигателя (в кубических дюймах)", 
+         xlab = "Значение", cex = 0.5)
+legend(x = "bottomright", title = "Тип двигателя", 
+       legend = c("V-образный", "прямой"),
+       col = c("red", "forestgreen"), fill = c("red", "forestgreen"))
+```
+
+Из графика видно, что машины с V-образным двигателем в большинстве случаев имеют больший объем двигателя, чем с прямым, что можно объяснить соображениями компактности двигателя (если хотим больший объем двигателя, нет смысла наращивать цилиндры в длину)
+
+
+
+
+# 2. Анализ выбранного датасета с помощью dotchart, boxplot и stripchart
+
+Датасет содержит информацию о 12181 объявлении о продаже апартаментов в Москве. Каждое объявление представлено 22 числовыми и категориальными признаками, среди которых цена, оценка ремонта по шкале от 1 до  4, возраст дома, расстояние до ближайшей станции метро и соответствующее id станции, количество комнат, административный округ, метраж и другие.
+
+
+```{r, message=FALSE}
+file <- file.choose()
+my_data <- read.csv(file)
+colnames(my_data)
+```
+```{r}
+my_data[, "AO"] <- as.factor(my_data$AO)
+my_data[, "price"] <- as.vector(my_data$price)
+```
+
+
+```{r}
+length(my_data$price) == length(my_data$AO)
+```
+
+
+График dotchart:
+```{r}
+price_means <- tapply(my_data$price, my_data$AO, FUN = mean)
+dotchart(as.numeric(price_means[order(price_means)]), 
+       labels = row.names(price_means[order(price_means)]),
+       main = "Средняя цена апартаментов в зависимости от округа",
+      xlab = "Цена, руб.")
+```
+
+
+
+График boxplot + stripchart:
+```{r}
+boxplot(my_data$price ~ my_data$AO, main = c("Графики распределения цены в зависимости", "от административного округа"), xlab = "", ylab = "Цена", las = 2, cex=0.5, col = rainbow(length(levels(my_data$AO))), outline = FALSE)
+mtext("Административный округ", side = 1, line = 4)
+stripchart(my_data$price ~ my_data$AO, vertical = TRUE, method = "jitter", jitter = 0.3, cex = 0.2, pch = "o", col = "black", add = TRUE)
+```
+
+
+
+# 3. Работа с выбросами с помощью критериев Граббса и Диксона
+
+Главное условие применимости критериев Граббса и Диксона - нормальное распределение данных. Для теста Диксона дополнительное ограничение - размер выборки из отрезка [6, 30].
+
+```{r}
+library(outliers)
+
+# устанавливаем seed для воспроизводимости результатов
+set.seed(5)
+
+# Генерируем выборку из стандартного нормального распределения размера 500
+X <- rnorm(n = 500, mean = 0, sd = 1)
+
+# Гистограмма сгенерированной выборки
+hist(X, freq = FALSE, breaks = 20, main = "Гистограмма стандартного нормлального распределения")
+```
+
+Проведем тест Граббса для данной выборки:
+```{r}
+grubbs.test(X, type = 10)
+```
+Тест Граббса определил минимальное значение как выброс с уровнем значимости 0.12, хотя вся выборка из нормального распределения (поэтому и уровень значимости довольно высок). 
+
+```{r, ehco=FALSE}
+# Исскуственно добавим в выборку два выброса:
+X <- append(X, c(5, -7))
+
+hist(X, freq = FALSE, breaks = 20, xlim = c(-10, 10), main = c("Гистограмма стандартного нормального распределения", "с выбросами на обоих хвостах"))
+```
+
+Воспользуемся критерием Граббса для определения выбросов:
+```{r}
+# Тест Граббса для двухсторонних выбросов
+grubbs.test(X, type = 11)
+```
+Результат: с помощью критерия Граббса выявлены оба выброса с очень высоким уровнем значимости
+
+
+Проведем тест Диксона для другой нормально распределенной выборки:
+```{r}
+X <- rnorm(25, mean = 0, sd = 1)
+hist(X, freq = FALSE, breaks = 5, main = "Гистограмма выборки X")
+```
+
+```{r}
+dixon.test(X)
+```
+
+Внесём выбросы в выборку Х и проведем тест Диксона:
+```{r}
+X <- append(X, 5)
+dixon.test(X)
+```
+Значение p-value достаточно мало, чтобы считать значение 5 выбросом.
+
+
+Попробуем применить данные тесты на выбросы на датасете о апартаментах Москвы. Как уже было сказано, условие применимости тестов Граббса и Диксона - нормальное распределение данных. 
+
+В моем датасете подозрительными на нормальность являются признаки цены и площади квартиры.
+```{r}
+hist(my_data$footage[my_data$rooms == 2], freq = FALSE, breaks = 10, main = "Гистограмма для площади апартаментов", xlab = "Площадь, кв. м.")
+```
+Гистограмма показывает, что площадь имеет бимодальное распределение, что уже не согласуется с гипотезой о нормальности.
+
+Гистограмма для распределения цены отдельно для каждого округа (суммарно для всех округов распределение цены не симметричное, т.е. не нормальное):
+```{r}
+for (ao in levels(my_data$AO)) {
+  hist(my_data$price[my_data$AO == ao], freq = FALSE, breaks = 20, main = c("Гистограмма для цены апартаментов", ao), xlab = "Цена, рубли")
+}
+```
+
+
+Наиболее похожее на нормальное распределение является распределение цен в округе "CAO".
+
+Проверим гипотезу о нормальности с помощью метода Шапиро-Уилка:
+```{r, message = FALSE, warning = FALSE}
+library(rstatix)
+
+shapiro.test(subset(my_data, AO == "CAO")$price)
+```
+Значение p-value < 0.05, => гипотеза о нормальности считается не выполненной для этих данных.
+
+В общем, у меня не получилось найти нормально распределенных признаков в моих данных. Именно поэтому я привел результаты тестов Граббса и Диксона на специально сгенерированной выборке.
+
+# 4. Работа с пропусками в данных
+
+Для работы с пропусками рассмотрим датафрейм, содержащий 1/10  случайных строк из my_data:
+```{r}
+data1 <- my_data[sample(1:(length(rownames(my_data))), size = (length(rownames(my_data)) %/% 10)), ]
+
+# сохранили данные в другом датафрейме
+data2 <- data1
+```
+
+Внесем пропуски в колонки price и footage:
+```{r}
+feature_list <- list("price", "footage")
+
+for (feature in feature_list) {
+  data1[sample(1:length(rownames(data1)), length(rownames(data1)) %/% 20), feature] <- NA
+}
+```
+
+Преобразуем столбцы repair и hm к типу factor:
+```{r}
+data1$repair <- as.factor(data1$repair)
+data1$hm <- as.factor(data1$hm)
+```
+
+С помощью функции aregImpute предсказываем пропущенные данные с помощью признаков price, footage, repair, rooms, AO, hm, dist_to_subway, subway_dist_to_center:
+```{r, message=FALSE}
+library(Hmisc)
+impute_arg <- aregImpute(~price + footage + repair + rooms + AO + hm + dist_to_subway + subway_dist_to_center , data = data1, n.impute = 5)
+```
+Подсчитаем среднее значение относительной ошибки (отношение разницы между реальными данными и предсказанными к реальным данным):
+```{r}
+data1$price[impute_arg$na$price] <- impute_arg$imputed$price[,1]
+data1$footage[impute_arg$na$footage] <- impute_arg$imputed$footage[,1]
+
+price_diff <- mapply(abs, data1$price - data2$price)
+err_vec <- price_diff / data2$price
+mean(err_vec[err_vec != 0])
+
+
+footage_diff <- mapply(abs, data1$footage - data2$footage)
+err_vec <- footage_diff / data2$footage
+mean(err_vec[err_vec != 0])
+```
+
+Получили, что средняя относительная ошибка для предсказания величины price составляет 0.138, а для footage - 0.111.
+

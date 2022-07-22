@@ -1,0 +1,142 @@
+---
+title: "ЦПТ"
+output: html_notebook
+---
+
+```{r}
+file <- file.choose()
+data <- read.csv(file)
+```
+
+Попытаемся применить центральную предельную теорему для получения нормально распределенных величин.
+```{r}
+attach(data)
+
+# в качестве выборки возьмем признак footage
+X <- footage
+X <- sample(X)
+
+# гистограмма распрделения X
+hist(X, freq = FALSE)
+```
+
+ЦПТ гласит, что центрированная и нормированная сумма н.о.р.с.в. сходится к нормальному распределению. Необходимо получить выборку из таких сумм.
+
+Посчитаем значения среднего и дисперсии по всей выборке Х:
+```{r}
+X_mean <- mean(X)
+X_sd <- sd(X)
+```
+
+Функия центрирования и нормирования суммы случайных величин:
+```{r}
+centrelize_normalize_sum <- function(Y, mean_val, sd_val) {
+
+  n <- length(Y)
+  (sum(Y) - n * mean_val) / (sd_val * sqrt(n))
+}
+```
+
+Функция выделения подвыборок длины не меньше k из выборки:
+```{r}
+make_subsamples <- function(X, k) {
+  subsamples <- list()
+  index <- 1
+  n <- length(X)
+  while (index <= n) {
+    subsamples <- append(subsamples, list(X[index : min(index + k - 1, n)]))
+    index <- index + k
+  }
+  return(subsamples)
+}
+```
+
+Разбиваем выборку Х на подвыборки длины 100, затем применяем функцию centrelize_normalize_sum для каждой подвыборки. Таким образом, получим выборку из распределения, стремящегося к нормальному, согласно ЦПТ.
+```{r}
+subsamples <- make_subsamples(X, 100)
+
+sum_sample <- mapply(centrelize_normalize_sum, subsamples, rep(X_mean, length(subsamples)), rep(X_sd, length(subsamples)))
+```
+
+Получили следущее распределение:
+```{r}
+hist(sum_sample, freq = FALSE, breaks = 10)
+```
+
+Проверим выборку на нормальность с помощью теста Шапиро:
+```{r}
+library(rstatix)
+
+shapiro.test(sum_sample)
+```
+p-value сильно больше 0.05, следовательно, гипотеза о нормальности согласуется с нашими данными (нулевая гипотеза - данные распределены не нормально, альтернативная - нормально)
+
+### Эксперимент 2
+
+Проведем эксперимент для подвыборок длины 80. В результате итоговая выборка будет иметь больший размер.
+```{r}
+subsamples <- make_subsamples(X, 80)
+
+sum_sample <- mapply(centrelize_normalize_sum, subsamples, rep(X_mean, length(subsamples)), rep(X_sd, length(subsamples)))
+```
+
+Получили следущее распределение:
+```{r}
+hist(sum_sample, freq = FALSE, breaks = 10)
+```
+
+Проверка на нормальность:
+```{r}
+shapiro.test(sum_sample)
+```
+
+### Эксперимент 3
+
+Проведем эксперимент для подвыборок длины 200. В результате итоговая выборка будет иметь размер 61.
+```{r}
+subsamples <- make_subsamples(X, 200)
+
+sum_sample <- mapply(centrelize_normalize_sum, subsamples, rep(X_mean, length(subsamples)), rep(X_sd, length(subsamples)))
+```
+
+Получили следущее распределение:
+```{r}
+hist(sum_sample, freq = FALSE, breaks = 5)
+```
+
+Проверка на нормальность:
+```{r}
+shapiro.test(sum_sample)
+```
+
+
+
+Еще одно применение ЦПТ: к отличие от предыдущего примера, рассмотрим выборку размера 12181, полученную просто центрированием и нормированием каждого значение, а затем проверим гипотезу о нормальном распределении.
+
+
+```{r}
+X <- footage
+hist(X, freq = FALSE)
+```
+
+
+```{r}
+X_mu <- mean(X)
+X_sd <- sd(X)
+
+Y <- (X - X_mu) / X_sd
+hist(Y, freq = FALSE, main=c("Гистограмма для центрированной", "нормированной выборки"))
+```
+
+Как и следовало ожидать, исходное распределение так и осталось бимодальным.
+Проверим выборку на нормальность:
+```{r}
+library(rstatix)
+Y <- sample(Y)
+y <- sample(Y, 5000)
+hist(y, freq = FALSE)
+shapiro.test(y)
+```
+
+
+
