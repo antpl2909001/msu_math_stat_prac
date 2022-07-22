@@ -1,0 +1,94 @@
+---
+title: "R Notebook"
+output:
+  html_document:
+    df_print: paged
+  pdf_document: default
+---
+
+
+```{r}
+my.mat <- matrix(seq(1, 20), nrow = 4, ncol= 5, byrow = TRUE)
+my.mat
+```
+
+```{r}
+colnames(my.mat) <- LETTERS[1:5]
+rownames(my.mat) <- 1:4
+my.mat
+```
+
+
+```{r}
+my.mat <- t(my.mat)
+my.mat
+```
+```{r}
+my.mat[2, 2]
+is.integer(my.mat[2, 2])
+is.logical(my.mat[2, 2])
+is.character(my.mat[2, 2])
+is.na(my.mat[2, 2])
+is.double(my.mat[2, 2])
+```
+Загружаем файл формата csv. Файл содержит информацию о 12181 объявлении о продаже квартиры в Москве. Каждое объявление представлено 22 числовыми и категориальными признаками, среди которых цена, оценка ремонта по шкале от 1 до  4, возраст дома, в котором расположена квартира, расстояние до ближайшей станции метро и соответствующее id станции, количество комнат, административный округ, метраж и другие.
+```{r}
+file <- "C:\\Users\\antpl_0n4duwv\\Documents\\Studies\\prac\\moscow_apartment_listings.csv"
+data <- read.csv(file, header = TRUE)
+str(data)
+```
+Работать будем с таблицей, состоящей из всех 12181 строк и признаков "price", "repair", "house_age", "rooms", "footage".
+```{r}
+DF <- data[, c("price", "repair", "house_age", "rooms", "footage")]
+```
+
+Построим гистограмму распределния цен квартир:
+
+```{r}
+library(tidyverse)
+ggplot(data = DF, aes_string(x = "price")) + geom_histogram(bins = 10)
+```
+
+Построим график зависимости цены от метража квартиры:
+```{r}
+ggplot(data = DF) + geom_smooth(aes(x = footage, y = price))
+```
+
+Проверим условие неотрицательности данных для датафрейма DF:
+```{r}
+ans <- TRUE
+for (col in colnames(DF)) {
+  i <- 1
+  while (i <= dim(DF)[1]) {
+    if (DF[i, col] < 0) {
+      ans <- FALSE
+      break
+    }
+    i <- i + 1
+  }
+}
+ans
+```
+Оценка качества ремонта есть число от 1 до 4. Проверим, все ли оценки ремонта квартир валидны, то есть лежат в пределах от 1 до 4:
+```{r}
+ans <- TRUE
+i <- 1
+repeat {
+  if (i == dim(DF)[1]) { break }
+  if (DF[i, "repair"] < 1 || DF[i, "repair"] > 4) {
+    ans <- FALSE
+    break
+  }
+  i <- i + 1
+}
+ans
+```
+Создадим список из векторов-признаков "price", "footage", "hm" и построим гистограмму для признака "footage", а также график зависимости цены от метража для каждого значения признака "hm" - материала, из которого сделан дом.
+```{r}
+flat.list <- list(price = as.vector(data[, "price"]), footage = as.vector(data[, "footage"]), hm = as.vector(data[, "hm"]))
+
+str(flat.list)
+
+ggplot() + geom_histogram(mapping = aes(x = flat.list$footage), bins = 8)
+ggplot() + geom_smooth(mapping = aes(x = flat.list$footage, y = flat.list$price, color = flat.list$hm))
+```
